@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat – {{ models[model].label }} {{ version }}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="chat-container">
+    <!-- 헤더 -->
+    <div class="chat-header">
+      <button class="back-btn" onclick="location.href='/'">← 뒤로가기</button>
+      <span class="model-info">{{ models[model].label }} · {{ version }}</span>
+    </div>
+
+    <!-- 메시지 리스트 -->
+    <div id="messages" class="message-list"></div>
+
+    <!-- 상태 표시 -->
+    <div id="status" class="status"></div>
+
+    <!-- 입력 폼 -->
+    <form id="chat-form" class="chat-input" onsubmit="sendMessage(event)">
+      <input
+        type="text"
+        id="user-input"
+        placeholder="메시지를 입력하세요."
+        autocomplete="off"
+        required
+      />
+      <button type="submit" id="send-btn">전송</button>
+    </form>
+  </div>
+
+  <script>
+    const API_URL = '/api/chat';
+    const MODEL_ID = '{{ model }}';
+    const VERSION  = '{{ version }}';
+    let history = [];
+    let isLoading = false;
+
+    async function sendMessage(e) {
+      e.preventDefault();
+      if (isLoading) return;
+      const input    = document.getElementById('user-input');
+      const sendBtn  = document.getElementById('send-btn');
+      const statusEl = document.getElementById('status');
+      const text     = input.value.trim();
+      if (!text) return;
+
+      appendMessage('user', text);
+      history.push({ role: 'user', content: text });
+      input.value = '';
+
+      // 로딩 시작
+      isLoading = true;
+      statusEl.textContent = '생성 중입니다…';
+      statusEl.style.display = 'block';
+      input.disabled   = true;
+      sendBtn.disabled = true;
+
+      // API 호출
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: MODEL_ID, version: VERSION, history, message: text })
+      });
+      const data = await res.json();
+
+      // 로딩 종료
+      isLoading = false;
+      statusEl.style.display = 'none';
+      statusEl.textContent   = '';
+      input.disabled   = false;
+      sendBtn.disabled = false;
+      input.focus();
+
+      appendMessage('bot', data.response);
+      history.push({ role: 'assistant', content: data.response });
+    }
+
+    function appendMessage(sender, text) {
+      const msgEl = document.createElement('div');
+      msgEl.className = `message ${sender}`;
+      msgEl.innerHTML = marked.parse(text);
+      document.getElementById('messages').appendChild(msgEl);
+      msgEl.scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

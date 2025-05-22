@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hyper</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Hyper</h1>
+      <p>원하는 LLM과 버전을 선택하세요</p>
+    </header>
+
+    <div class="models">
+      {% for key, m in models.items() %}
+      <div class="model-card" data-model="{{ key }}" onclick="selectCard(this)">
+        <div class="card-header">
+          <h2>{{ m.label }}</h2>
+          <p>{{ m.description }}</p>
+        </div>
+        <div class="card-body">
+          <select id="select-{{ key }}" class="version-select" data-model="{{ key }}">
+            {% for v in m.versions %}
+            <option value="{{ v.id }}" {% if v.id == m.default %}selected{% endif %}>
+              {{ v.label }} — {{ v.desc }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="start-container">
+      <button id="start-btn" class="start-btn">시작하기</button>
+    </div>
+  </div>
+
+  <script>
+    // 카드 클릭 시 선택 토글
+    function selectCard(card) {
+      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    }
+
+    // 시작하기 버튼 클릭 시 선택된 모델→채팅페이지로 이동
+    document.getElementById('start-btn').addEventListener('click', () => {
+      const card = document.querySelector('.model-card.selected');
+      if (!card) {
+        alert('사용할 모델을 선택해주세요.');
+        return;
+      }
+      const select = card.querySelector('.version-select');
+      const model = select.dataset.model;
+      const version = select.value;
+      window.location.href = `/chat?model=${model}&version=${version}`;
+    });
+  </script>
+</body>
+</html>
