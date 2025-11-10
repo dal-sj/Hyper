@@ -13,6 +13,8 @@ from typing import List, Dict
 # Google Gemini SDK
 from google import genai
 from google.genai import types as gemini_types
+from google.genai.types import GenerationConfig
+from google.genai import errors as genai_errors
 
 # OpenAI SDK
 # import openai
@@ -53,39 +55,22 @@ gemini_models = [
 ]
 
 if GEMINI_KEY:
-
     try:
-
         gemini_client = genai.Client(api_key=GEMINI_KEY)
-
         
-
         fetched_models = []
-
         for m in gemini_client.models.list():
-
             if 'generateContent' in m.supported_actions:
-
                 model_id = m.name.split('/')[-1]
-
                 # 간단한 설명을 위해 모델 ID에서 일부 정보 추출
-
                 desc = f"{m.display_name}"
-
                 fetched_models.append({"id": model_id, "label": m.display_name, "desc": desc})
-
         
-
         if fetched_models:
-
             gemini_models = fetched_models
-
             
-
     except Exception as e:
-
         print(f"Gemini 모델 목록을 가져오는 데 실패했습니다: {e}")
-
         # 실패 시 기본 모델 목록 유지
 
 
@@ -293,39 +278,26 @@ async def chat(req: ChatRequest):
     # 모델 gemini 선택택
 
     if req.model == "gemini":
-
         if not gemini_client:
-
             raise HTTPException(401, "Invalid API key for Gemini")
-
         
-
-        # Gemini: 기존 로직
-
+        # Prepare contents for the conversation
         contents = []
-
         for m in req.history:
-
             part = gemini_types.Part.from_text(text=m["content"])
-
             contents.append(
-
                 gemini_types.UserContent(parts=[part]) if m["role"] == "user"
-
                 else gemini_types.ModelContent(parts=[part])
-
             )
-
-        # 현재 메시지
-
+        # Add the current message
         user_part = gemini_types.Part.from_text(text=req.message)
-
         contents.append(gemini_types.UserContent(parts=[user_part]))
 
-
-
-        result = gemini_client.models.generate_content(model=f"models/{req.version}", contents=contents)
-
+        # Call generate_content
+        result = gemini_client.models.generate_content(
+            model=f"models/{req.version}",
+            contents=contents
+        )
         reply = result.text
 
 

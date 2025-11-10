@@ -167,6 +167,7 @@
     word-break: break-word;
     hyphens: auto;
     margin: 0;              /* gap으로 간격 처리 */
+
   }
   
   /* 사용자/봇 말풍선 구분 */
@@ -177,28 +178,30 @@
     margin-left: auto;
     margin-right: 16px;
     border-bottom-right-radius: 4px;
+    position: relative; /* Needed for absolute positioning of the child button */
   }
-  .message.bot {
+  
+  .message.assistant {
     align-self: flex-start;
     margin-left: 16px;
     margin-right: auto;
     border-bottom-left-radius: 4px;
+    position: relative; 
   }
   
   /* ========== 내부 마크다운 요소 조정 ========== */
-  /* 1) <p>는 기본 인라인, 이중 단락만 블록 구분 */
-  .message p {
+  .message .content p {
     display: inline;
     margin: 0;
     padding: 0;
   }
-  .message p + p {
+  .message .content p + p {
     display: block;
     margin: 0.75em 0 0.5em 0;
   }
   
   /* 2) <br>는 순수 줄바꿈 */
-  .message br {
+  .message .content br {
     display: inline;
     line-height: 1.4;
     margin: 0;
@@ -206,23 +209,23 @@
   }
   
   /* 3) 헤딩/리스트/인용 최소 여백 */
-  .message h1, .message h2, .message h3,
-  .message h4, .message h5, .message h6 {
+  .message .content h1, .message .content h2, .message .content h3,
+  .message .content h4, .message .content h5, .message .content h6 {
     margin: 0 0 0.5em 0;
     padding: 0;
   }
-  .message ul, .message ol {
+  .message .content ul, .message .content ol {
     margin: 0 0 0.5em 1.2em;
     padding: 0;
   }
-  .message blockquote {
+  .message .content blockquote {
     margin: 0 0 0.5em 0;
     padding-left: 1em;
     border-left: 3px solid #ccc;
   }
   
   /* 4) 코드블록만 pre-wrap 유지 */
-  .message pre {
+  .message .content pre {
     background: #2d2d2d;
     color: #f8f8f2;
     padding: 12px;
@@ -261,4 +264,62 @@
   .chat-input button:hover {
     background: #005bb5;
   }
+
+/* ===========================================
+   Chat Message Add-ons (Toolbar)
+   =========================================== */
+.message .content {
+}
+
+.message-toolbar {
+  position: absolute;
+  right: calc(100% + 5px); /* Default for user messages */
+  top: 50%;
+  transform: translateY(-50%);
   
+  display: flex;
+  flex-direction: column; /* Stack items vertically */
+  gap: 2px; /* Adjusted gap for vertical stacking */
+  
+  background-color: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 2px 4px; /* Adjusted padding for vertical layout */
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  z-index: 10;
+}
+
+/* Show toolbar on parent message hover */
+.message:hover > .message-toolbar {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* For bot messages - needs different positioning */
+.message.assistant .message-toolbar {
+  left: calc(100% + 5px);
+  right: auto;
+}
+
+.toolbar-btn {
+  /* Reset button styles */
+  background: none;
+  border: none;
+  
+  /* Custom styles */
+  color: #555;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  white-space: nowrap; /* Prevent text from wrapping */
+}
+
+.toolbar-btn:hover {
+  background-color: #f0f0f0;
+  color: #000;
+}

@@ -22,7 +22,7 @@
     <div id="status" class="status"></div>
 
     <!-- 입력 폼 -->
-    <form id="chat-form" class="chat-input" onsubmit="sendMessage(event)">
+    <form id="chat-form" class="chat-input">
       <input
         type="text"
         id="user-input"
@@ -31,6 +31,7 @@
         required
       />
       <button type="submit" id="send-btn">전송</button>
+      <button type="button" id="cancel-edit-btn" style="display:none;">수정 취소</button>
     </form>
   </div>
 
@@ -38,56 +39,210 @@
     const API_URL = '/api/chat';
     const MODEL_ID = '{{ model }}';
     const VERSION  = '{{ version }}';
+    
+    const chatForm = document.getElementById('chat-form');
+    const input    = document.getElementById('user-input');
+    const sendBtn  = document.getElementById('send-btn');
+    const cancelBtn = document.getElementById('cancel-edit-btn');
+    const statusEl = document.getElementById('status');
+    const messagesEl = document.getElementById('messages');
+
     let history = [];
     let isLoading = false;
+    let editingIndex = null;
 
-    async function sendMessage(e) {
+    // --- Event Listeners ---
+    chatForm.addEventListener('submit', handleSubmit);
+    cancelBtn.addEventListener('click', cancelEdit);
+
+    // --- Core Functions ---
+    async function handleSubmit(e) {
       e.preventDefault();
       if (isLoading) return;
-      const input    = document.getElementById('user-input');
-      const sendBtn  = document.getElementById('send-btn');
-      const statusEl = document.getElementById('status');
-      const text     = input.value.trim();
-      if (!text) return;
+      
+      const text = input.value.trim();
+      if (!text) {
+        if (editingIndex !== null) cancelEdit();
+        return;
+      }
 
-      appendMessage('user', text);
-      history.push({ role: 'user', content: text });
-      input.value = '';
+      setLoading(true);
 
-      // 로딩 시작
-      isLoading = true;
-      statusEl.textContent = '생성 중입니다…';
-      statusEl.style.display = 'block';
-      input.disabled   = true;
-      sendBtn.disabled = true;
+      if (editingIndex !== null) {
+        // --- EDIT LOGIC ---
+        const historyPayload = history.slice(0, editingIndex);
+        
+        while (messagesEl.children.length > editingIndex) {
+            messagesEl.removeChild(messagesEl.lastChild);
+        }
+        
+        appendMessage('user', text, editingIndex);
+        
+        const data = await callChatAPI(historyPayload, text);
+        if (data) {
+            // Re-render everything from the new history to ensure consistency
+            history = data.history;
+            renderAllMessages();
+        } else {
+            // On failure, re-render the old state
+            renderAllMessages();
+        }
+        cancelEdit();
 
-      // API 호출
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: MODEL_ID, version: VERSION, history, message: text })
-      });
-      const data = await res.json();
+      } else {
+        // --- NEW MESSAGE LOGIC ---
+        const historyPayload = [...history];
+        appendMessage('user', text, history.length);
+        history.push({ role: 'user', content: text });
+        input.value = '';
 
-      // 로딩 종료
-      isLoading = false;
-      statusEl.style.display = 'none';
-      statusEl.textContent   = '';
-      input.disabled   = false;
-      sendBtn.disabled = false;
-      input.focus();
-
-      appendMessage('bot', data.response);
-      history.push({ role: 'assistant', content: data.response });
+        const data = await callChatAPI(historyPayload, text);
+        if (data) {
+            history = data.history;
+            // We only need to append the last message, but re-rendering is safer
+            renderAllMessages();
+        } else {
+            history.pop(); // Revert state
+            renderAllMessages();
+        }
+      }
+      setLoading(false);
     }
 
-    function appendMessage(sender, text) {
+    async function regenerate(e) {
+        e.preventDefault();
+        if (isLoading || history.length < 2) return;
+
+        setLoading(true);
+
+        history.pop(); // bot from state
+        const lastUserTurn = history.pop(); // user from state
+        
+        const historyPayload = [...history];
+        history.push(lastUserTurn); // re-add user turn for render
+
+        renderAllMessages();
+
+        const data = await callChatAPI(historyPayload, lastUserTurn.content);
+        if (data) {
+            history = data.history;
+        } else {
+            history.pop(); // Revert
+        }
+        renderAllMessages();
+        setLoading(false);
+    }
+
+    async function callChatAPI(historyPayload, messagePayload) {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            model: MODEL_ID, 
+            version: VERSION, 
+            history: historyPayload, 
+            message: messagePayload 
+          })
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.detail || 'API 호출 중 오류가 발생했습니다.');
+        }
+        return await res.json();
+      } catch (error) {
+        // Temporarily append error message, it will be cleared on next render
+        appendMessage('error', `오류: ${error.message}`, history.length);
+        return null;
+      }
+    }
+    
+    // --- Rendering ---
+    function renderAllMessages() {
+        messagesEl.innerHTML = '';
+        history.forEach((msg, i) => {
+            appendMessage(msg.role, msg.content, i);
+        });
+    }
+
+    function appendMessage(sender, text, index) {
       const msgEl = document.createElement('div');
       msgEl.className = `message ${sender}`;
-      msgEl.innerHTML = marked.parse(text);
-      document.getElementById('messages').appendChild(msgEl);
+      msgEl.dataset.index = index;
+
+      const contentEl = document.createElement('div');
+      contentEl.className = 'content';
+      contentEl.innerHTML = marked.parse(text);
+      msgEl.appendChild(contentEl);
+
+      if (sender === 'user' || sender === 'assistant') {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'message-toolbar';
+
+        if (sender === 'user') {
+          const editBtn = document.createElement('button');
+          editBtn.className = 'toolbar-btn';
+          editBtn.textContent = '수정';
+          editBtn.onclick = () => startEdit(index);
+          toolbar.appendChild(editBtn);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'toolbar-btn';
+          deleteBtn.textContent = '삭제';
+          deleteBtn.onclick = () => deleteTurn(index);
+          toolbar.appendChild(deleteBtn);
+        } else if (sender === 'assistant') {
+          const regenBtn = document.createElement('button');
+          regenBtn.className = 'toolbar-btn';
+          regenBtn.textContent = '재생성';
+          regenBtn.onclick = (e) => regenerate(e);
+          toolbar.appendChild(regenBtn);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'toolbar-btn';
+          deleteBtn.textContent = '삭제';
+          deleteBtn.onclick = () => deleteTurn(index);
+          toolbar.appendChild(deleteBtn);
+        }
+        
+        msgEl.appendChild(toolbar);
+      }
+      
+      messagesEl.appendChild(msgEl);
       msgEl.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // --- UI & State Management Helpers ---
+    function startEdit(index) {
+        editingIndex = index;
+        input.value = history[index].content;
+        input.focus();
+        sendBtn.textContent = '수정 완료';
+        cancelBtn.style.display = 'inline-block';
+    }
+
+    function cancelEdit() {
+        editingIndex = null;
+        input.value = '';
+        sendBtn.textContent = '전송';
+        cancelBtn.style.display = 'none';
+    }
+
+    function deleteTurn(index) {
+        if (confirm("이 메시지를 삭제하시겠습니까?")) {
+            history.splice(index, 1);
+            renderAllMessages();
+        }
+    }
+
+    function setLoading(loading) {
+      isLoading = loading;
+      statusEl.textContent = loading ? '생성 중입니다…' : '';
+      statusEl.style.display = loading ? 'block' : 'none';
+      input.disabled   = loading;
+      sendBtn.disabled = loading;
+      cancelBtn.disabled = loading;
     }
   </script>
 </body>
-</html>
