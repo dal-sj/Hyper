@@ -26,13 +26,12 @@ from google.genai import errors as genai_errors
 load_dotenv()
 
 # Paths
-BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = BASE_DIR / "frontend"
+BASE_DIR = Path(__file__).resolve().parent
 
 # FastAPI app
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
-templates = Jinja2Templates(directory=str(FRONTEND_DIR))
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 # --- 클라이언트 초기화 및 모델 메타데이터 동적 로딩 ---
 
